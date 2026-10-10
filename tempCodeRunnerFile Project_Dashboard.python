@@ -1,0 +1,555 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+import mysql.connector
+from PIL import Image, ImageTk
+
+
+class StudentDashboardApp:
+    """
+    Every method here is an independent, top-level function (a method
+    on this class) instead of a def nested inside another def. None of
+    them rely on Python closures to see each other's local variables.
+    Instead, anything that needs to be shared between methods (StringVars,
+    widget references, the currently signed-up user's values, etc.) is
+    stored as a `self.xxx` attribute, so each method can be read, tested,
+    or called on its own without needing the surrounding function that
+    originally created it.
+    """
+
+    # Update these two paths to match where the images live on YOUR
+    # computer.
+    BG_IMAGE_PATH = "C:/Users/Hi/OneDrive/Pictures/PROJECT/school_student_scene.jpg"
+    LOGO_IMAGE_PATH = "C:/Users/Hi/OneDrive/Pictures/PROJECT/GD_International_School_Logo.jpg"
+
+    def __init__(self, root):
+        self.root = root
+        self.root.title("STUDENT DASHBOARD")
+        self.root.geometry("1100x700")
+
+        # ---- form state (was closure-local StringVars before) ----
+        self.name_var = tk.StringVar()
+        self.password_var = tk.StringVar()
+        self.username_var = tk.StringVar()
+        self.DOB_var = tk.StringVar()
+        self.email_var = tk.StringVar()
+        self.phoneno_var = tk.StringVar()
+        self.gender_var = tk.StringVar()
+        self.address_var = tk.StringVar()
+        self.course_var = tk.StringVar()
+        self.oldpass_var = tk.StringVar()
+        self.newpass_var = tk.StringVar()
+        self.olduser_var = tk.StringVar()
+        self.father_var = tk.StringVar()
+        self.mother_var = tk.StringVar()
+        self.confirmpassword_var = tk.StringVar()
+
+        # ---- widget groups, so each screen can be cleared as a unit ----
+        self.welcome_widgets = {}
+        self.signup_widgets = {}
+        self.login_widgets = {}
+        self.dashboard_widgets = {}
+        self.info_labels = {}   # widgets belonging to the Info/Password panel
+
+        # ---- misc shared state ----
+        self.values = None      # tuple of the last account created (used by info())
+        self.bg_photo = None    # keep a reference so Tkinter doesn't garbage-collect it
+        self.bg_photo1 = None
+
+        self.load_background_images()
+        self.show_welcome()
+
+    # ------------------------------------------------------------------
+    # Database
+    # ------------------------------------------------------------------
+    def connect(self):
+        """Create and return a new MySQL connection."""
+        return mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="",
+            database="ishika"
+        )
+
+    # ------------------------------------------------------------------
+    # Background images
+    # ------------------------------------------------------------------
+    def load_background_images(self):
+        try:
+            bg_img = Image.open(self.BG_IMAGE_PATH).resize((1100, 700))
+            self.bg_photo = ImageTk.PhotoImage(bg_img)
+            bg_label = tk.Label(self.root, image=self.bg_photo)
+            bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+            bg_label.lower()
+        except Exception as e:
+            print(f"Could not load background image: {e}")
+            self.root.configure(bg="white")
+
+        try:
+            bg_img1 = Image.open(self.LOGO_IMAGE_PATH).resize((200, 200))
+            self.bg_photo1 = ImageTk.PhotoImage(bg_img1)
+            bg_label1 = tk.Label(self.root, image=self.bg_photo1, bd=0)
+            bg_label1.place(x=360, y=350)
+            bg_label1.lift()
+        except Exception as e:
+            print(f"Could not load logo image: {e}")
+
+    # ------------------------------------------------------------------
+    # Generic helper: clear any widget group safely
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _clear(widget_dict):
+        for w in widget_dict.values():
+            try:
+                w.destroy()
+            except tk.TclError:
+                pass
+        widget_dict.clear()
+
+    # ------------------------------------------------------------------
+    # Welcome screen
+    # ------------------------------------------------------------------
+    def show_welcome(self):
+        note = tk.Label(self.root, text="WELCOME", font=("arial", 30, "bold"), relief="solid",
+                         bg="green", fg="white", borderwidth=10, padx=8, pady=20)
+        note.place(x=320, y=0)
+
+        note1 = tk.Label(self.root, text="STUDENT DASHBOARD", font=("arial", 20, "bold"), relief="solid",
+                          bg="green", fg="white", borderwidth=7, padx=8, pady=20)
+        note1.place(x=270, y=120)
+
+        note2 = tk.Label(self.root, text="INTERNATIONAL SCHOOL", font=("arial", 20, "bold"), relief="solid",
+                          bg="green", fg="white", borderwidth=7, padx=8, pady=20)
+        note2.place(x=260, y=220)
+
+        continuebtn = tk.Button(self.root, text="Continue", font=("arial", 15, "bold"), relief="groove",
+                                 bg="darkgreen", fg="white", borderwidth=8, padx=5, pady=15,
+                                 command=self.continui)
+        continuebtn.place(x=520, y=340)
+
+        self.welcome_widgets = {
+            "note": note, "note1": note1, "note2": note2, "continuebtn": continuebtn
+        }
+
+    def continui(self):
+        self.welcome_widgets["continuebtn"].destroy()
+        del self.welcome_widgets["continuebtn"]
+
+        btnsignin = tk.Button(self.root, text="SIGN UP", font=("arial", 15, "bold"), relief="groove",
+                               bg="darkgreen", fg="white", borderwidth=8, padx=5, pady=15,
+                               command=self.signup)
+        btnsignin.place(x=710, y=550)
+
+        btnlogin = tk.Button(self.root, text="LOG IN", font=("arial", 15, "bold"), relief="groove",
+                              bg="darkgreen", fg="white", borderwidth=8, padx=5, pady=15,
+                              command=self.login)
+        btnlogin.place(x=50, y=550)
+
+        self.welcome_widgets["btnsignin"] = btnsignin
+        self.welcome_widgets["btnlogin"] = btnlogin
+
+    # ------------------------------------------------------------------
+    # Sign up
+    # ------------------------------------------------------------------
+    def signup(self):
+        self._clear(self.welcome_widgets)
+
+        w = self.signup_widgets  # short alias, still the same shared dict
+
+        w["note3"] = tk.Label(self.root, text="SIGN UP", font=("arial", 15, "bold"), relief="solid",
+                               bg="darkgreen", fg="white", borderwidth=5, padx=5, pady=15)
+        w["note3"].place(x=470, y=0)
+
+        w["name_label"] = tk.Label(self.root, text="Full Name", font=("arial", 15, "bold"), relief="solid",
+                                    borderwidth=5, bg="darkgreen", fg="white")
+        w["name_label"].place(x=170, y=100)
+        w["name_entry"] = tk.Entry(self.root, textvariable=self.name_var, font=("arial", 15, "bold"),
+                                    relief="solid", borderwidth=5)
+        w["name_entry"].place(x=320, y=100)
+
+        w["username_label"] = tk.Label(self.root, text="Username", font=("arial", 15, "bold"), relief="solid",
+                                        borderwidth=5, bg="darkgreen", fg="white")
+        w["username_label"].place(x=170, y=170)
+        w["username_entry"] = tk.Entry(self.root, textvariable=self.username_var, font=("arial", 15, "bold"),
+                                        relief="solid", borderwidth=5)
+        w["username_entry"].place(x=320, y=170)
+
+        w["password_label"] = tk.Label(self.root, text="Password", font=("arial", 15, "bold"), relief="solid",
+                                        borderwidth=5, bg="darkgreen", fg="white")
+        w["password_label"].place(x=170, y=240)
+        w["password_entry"] = tk.Entry(self.root, textvariable=self.password_var, font=("arial", 15, "bold"),
+                                        relief="solid", borderwidth=5, show="*")
+        w["password_entry"].place(x=320, y=240)
+
+        w["confirmpassword_label"] = tk.Label(self.root, text="Confirm_Password", font=("arial", 15, "bold"),
+                                               relief="solid", borderwidth=5, bg="darkgreen", fg="white")
+        w["confirmpassword_label"].place(x=170, y=310)
+        w["confirmpassword_entry"] = tk.Entry(self.root, textvariable=self.confirmpassword_var,
+                                               font=("arial", 15, "bold"), relief="solid", borderwidth=5, show="*")
+        w["confirmpassword_entry"].place(x=320, y=310)
+
+        w["father_label"] = tk.Label(self.root, text="Father_Name", font=("arial", 15, "bold"), relief="solid",
+                                      borderwidth=5, bg="darkgreen", fg="white")
+        w["father_label"].place(x=170, y=380)
+        w["father_entry"] = tk.Entry(self.root, textvariable=self.father_var, font=("arial", 15, "bold"),
+                                      relief="solid", borderwidth=5)
+        w["father_entry"].place(x=320, y=380)
+
+        w["mother_label"] = tk.Label(self.root, text="Mother_Name", font=("arial", 15, "bold"), relief="solid",
+                                      borderwidth=5, bg="darkgreen", fg="white")
+        w["mother_label"].place(x=170, y=450)
+        w["mother_entry"] = tk.Entry(self.root, textvariable=self.mother_var, font=("arial", 15, "bold"),
+                                      relief="solid", borderwidth=5)
+        w["mother_entry"].place(x=320, y=450)
+
+        w["DOB_label"] = tk.Label(self.root, text="DOB", font=("arial", 15, "bold"), relief="solid",
+                                   borderwidth=5, bg="darkgreen", fg="white")
+        w["DOB_label"].place(x=170, y=520)
+        w["DOB_entry"] = tk.Entry(self.root, textvariable=self.DOB_var, font=("arial", 15, "bold"),
+                                   relief="solid", borderwidth=5)
+        w["DOB_entry"].place(x=320, y=520)
+
+        w["email_label"] = tk.Label(self.root, text="Email", font=("arial", 15, "bold"), relief="solid",
+                                     borderwidth=5, bg="darkgreen", fg="white")
+        w["email_label"].place(x=650, y=100)
+        w["email_entry"] = tk.Entry(self.root, textvariable=self.email_var, font=("arial", 15, "bold"),
+                                     relief="solid", borderwidth=5)
+        w["email_entry"].place(x=780, y=100)
+
+        w["phoneno_label"] = tk.Label(self.root, text="Contact Number", font=("arial", 12, "bold"), relief="solid",
+                                       borderwidth=5, bg="darkgreen", fg="white", width=13, height=2)
+        w["phoneno_label"].place(x=650, y=170)
+        w["phoneno_entry"] = tk.Entry(self.root, textvariable=self.phoneno_var, font=("arial", 15, "bold"),
+                                       relief="solid", borderwidth=5)
+        w["phoneno_entry"].place(x=780, y=170)
+
+        w["address_label"] = tk.Label(self.root, text="Address", font=("arial", 15, "bold"), relief="solid",
+                                       borderwidth=5, bg="darkgreen", fg="white")
+        w["address_label"].place(x=650, y=240)
+        w["address_entry"] = tk.Entry(self.root, textvariable=self.address_var, font=("arial", 15, "bold"),
+                                       relief="solid", borderwidth=5)
+        w["address_entry"].place(x=780, y=240)
+
+        w["gender_label"] = tk.Label(self.root, text="Gender", font=("arial", 15, "bold"), relief="solid",
+                                      borderwidth=5, bg="darkgreen", fg="white")
+        w["gender_label"].place(x=650, y=310)
+        gender_options = ["Male", "Female", "Other"]
+        w["gender_entry"] = ttk.Combobox(self.root, values=gender_options, textvariable=self.gender_var,
+                                          font=("arial", 15, "bold"), state="readonly", width=20, height=2)
+        w["gender_entry"].place(x=780, y=310)
+
+        w["course_label"] = tk.Label(self.root, text="Course", font=("arial", 15, "bold"), relief="solid",
+                                      borderwidth=5, bg="darkgreen", fg="white")
+        w["course_label"].place(x=650, y=380)
+        course_options = ["Medical(PCB)", "Non-Medical(PCM)", "Commerce", "Humanities"]
+        w["course_entry"] = ttk.Combobox(self.root, values=course_options, textvariable=self.course_var,
+                                          font=("arial", 15, "bold"), state="readonly", width=20, height=2)
+        w["course_entry"].place(x=780, y=380)
+
+        w["submitbtn"] = tk.Button(self.root, text="SUBMIT", font=("arial", 15, "bold"), relief="sunken",
+                                    bg="darkgreen", fg="white", borderwidth=4, padx=2, pady=5,
+                                    command=self.submit)
+        w["submitbtn"].place(x=470, y=600)
+
+        # sensible defaults / reset (placed AFTER the widgets exist)
+        self.name_var.set("")
+        self.password_var.set("")
+        self.username_var.set("")
+        self.DOB_var.set("")
+        self.email_var.set("")
+        self.phoneno_var.set("")
+        self.address_var.set("")
+        self.father_var.set("")
+        self.mother_var.set("")
+        self.confirmpassword_var.set("")
+        self.gender_var.set("Select Option")
+        self.course_var.set("Select Course")
+
+    def submit(self):
+        name = self.name_var.get().strip()
+        username = self.username_var.get().strip()
+        password = self.password_var.get().strip()
+        conpass = self.confirmpassword_var.get().strip()
+        father = self.father_var.get().strip()
+        mother = self.mother_var.get().strip()
+        DOB = self.DOB_var.get().strip()
+        email = self.email_var.get().strip()
+        phno = self.phoneno_var.get().strip()
+        gender = self.gender_var.get().strip()
+        address = self.address_var.get().strip()
+        course = self.course_var.get().strip()
+
+        if (name == "" or username == "" or password == "" or conpass == "" or
+                father == "" or mother == "" or DOB == "" or email == "" or
+                phno == "" or address == "" or gender in ("", "Select Option") or
+                course in ("", "Select Course")):
+            messagebox.showerror("Empty Fields", "Please fill all the required fields.")
+            return
+
+        if password != conpass:
+            messagebox.showerror("Password Error", "Password and Confirm Password did not match.")
+            self.password_var.set("")
+            self.confirmpassword_var.set("")
+            self.signup_widgets["password_entry"].focus()
+            return
+
+        # NOTE: passwords are stored in plain text here to match the
+        # original design. For a real application you should hash
+        # passwords (e.g. with bcrypt/passlib) before saving them, and
+        # avoid storing both Password and Confirm_Password columns.
+        values = (name, username, password, conpass, father, mother,
+                  DOB, email, phno, address, gender, course)
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            sql = """
+            INSERT INTO `project_dashboard`
+            (Name, Username, Password, Confirm_Password, Father_Name, Mother_Name,
+             DOB, Email, Phone_Number, Address, Gender, Course)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
+            cursor.execute(sql, values)
+            conn.commit()
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", f"Could not save your details:\n{err}")
+            return
+        finally:
+            try:
+                cursor.close()
+                conn.close()
+            except Exception:
+                pass
+
+        messagebox.showinfo("Success", "Account created successfully!")
+
+        self.values = values
+        self._clear(self.signup_widgets)
+        self.show_dashboard()
+
+    # ------------------------------------------------------------------
+    # Dashboard (shown after signup)
+    # ------------------------------------------------------------------
+    def show_dashboard(self):
+        d = self.dashboard_widgets
+
+        d["note4"] = tk.Label(self.root, text="Student Dashboard", font=("arial", 30, "bold"), relief="solid",
+                               bg="darkgreen", fg="white", borderwidth=7, padx=6, pady=15)
+        d["note4"].place(x=280, y=0)
+
+        d["pasbtn"] = tk.Button(self.root, text="Info", font=("arial", 17, "bold"), relief="groove",
+                                 bg="darkgreen", fg="white", borderwidth=4, width=10, height=2,
+                                 command=self.info)
+        d["pasbtn"].place(x=1, y=150)
+
+        d["updbtn"] = tk.Button(self.root, text="Password", font=("arial", 17, "bold"), relief="groove",
+                                 bg="darkgreen", fg="white", borderwidth=4, width=10, height=2,
+                                 command=self.password)
+        d["updbtn"].place(x=1, y=230)
+
+        d["paybtn"] = tk.Button(self.root, text="Update", font=("arial", 17, "bold"), relief="groove",
+                                 bg="darkgreen", fg="white", borderwidth=4, width=10, height=2)
+        d["paybtn"].place(x=1, y=310)
+
+        d["attbtn"] = tk.Button(self.root, text="Payments", font=("arial", 17, "bold"), relief="groove",
+                                 bg="darkgreen", fg="white", borderwidth=4, width=10, height=2)
+        d["attbtn"].place(x=1, y=390)
+
+        d["curbtn"] = tk.Button(self.root, text="Log-Out", font=("arial", 17, "bold"), relief="groove",
+                                 bg="darkgreen", fg="white", borderwidth=4, width=10, height=2,
+                                 command=self.logout)
+        d["curbtn"].place(x=1, y=470)
+
+    def logout(self):
+        self.root.destroy()
+
+    # ------------------------------------------------------------------
+    # Info / Password panel (right-hand content area of the dashboard)
+    # ------------------------------------------------------------------
+    def clear_panel(self):
+        # Both info() and password() register every widget they create
+        # in self.info_labels, and both call this first. That's what
+        # stops the two panels from ever overlapping on screen.
+        self._clear(self.info_labels)
+
+    def info(self):
+        if not self.values:
+            messagebox.showerror("No Data", "No account details to show yet.")
+            return
+
+        fields = [
+            ("NAME", self.values[0]),
+            ("USERNAME", self.values[1]),
+            ("FATHER NAME", self.values[4]),
+            ("MOTHER NAME", self.values[5]),
+            ("DOB", self.values[6]),
+            ("EMAIL", self.values[7]),
+            ("CONTACT NUMBER", self.values[8]),
+            ("ADDRESS", self.values[9]),
+            ("GENDER", self.values[10]),
+            ("COURSE", self.values[11]),
+        ]
+        self.clear_panel()
+
+        y = 150
+        for key, val in fields:
+            lbl = tk.Label(self.root, text=f"{key}:  {val}", font=("Arial", 14, "bold"),
+                            fg="black", padx=5, pady=10)
+            lbl.place(x=220, y=y)
+            self.info_labels[key] = lbl
+            y += 50
+
+    def password(self):
+        self.clear_panel()
+
+        self.info_labels["note17"] = tk.Label(self.root, text="Password Info", font=("arial", 30, "bold"),
+                                               relief="solid", bg="darkgreen", fg="white",
+                                               borderwidth=7, padx=6, pady=15)
+        self.info_labels["note17"].place(x=300, y=150)
+
+        self.info_labels["old_label"] = tk.Label(self.root, text="Your Password", font=("arial", 15, "bold"),
+                                                  relief="solid", borderwidth=5, bg="darkgreen", fg="white",
+                                                  padx=10, pady=10)
+        self.info_labels["old_label"].place(x=180, y=300)
+        self.info_labels["old_entry"] = tk.Entry(self.root, textvariable=self.oldpass_var,
+                                                  font=("arial", 15, "bold"), relief="solid",
+                                                  borderwidth=5, show="*")
+        self.info_labels["old_entry"].place(x=430, y=300)
+
+        self.info_labels["olduser_label"] = tk.Label(self.root, text="Username", font=("arial", 15, "bold"),
+                                                      relief="solid", borderwidth=5, bg="darkgreen", fg="white",
+                                                      padx=10, pady=10)
+        self.info_labels["olduser_label"].place(x=180, y=360)
+        self.info_labels["olduser_entry"] = tk.Entry(self.root, textvariable=self.olduser_var,
+                                                      font=("arial", 15, "bold"), relief="solid", borderwidth=5)
+        self.info_labels["olduser_entry"].place(x=430, y=360)
+
+        self.info_labels["new_label"] = tk.Label(self.root, text="New Password", font=("arial", 15, "bold"),
+                                                  relief="solid", borderwidth=5, bg="darkgreen", fg="white",
+                                                  padx=10, pady=10)
+        self.info_labels["new_label"].place(x=180, y=420)
+        self.info_labels["new_entry"] = tk.Entry(self.root, textvariable=self.newpass_var,
+                                                  font=("arial", 15, "bold"), relief="solid",
+                                                  borderwidth=5, show="*")
+        self.info_labels["new_entry"].place(x=430, y=420)
+
+        self.info_labels["confirmbtn"] = tk.Button(self.root, text="Confirm", font=("arial", 15, "bold"),
+                                                    relief="sunken", bg="darkgreen", fg="white", borderwidth=4,
+                                                    padx=2, pady=5, command=self.confirm)
+        self.info_labels["confirmbtn"].place(x=470, y=600)
+
+        # reset any leftover values from a previous attempt
+        self.oldpass_var.set("")
+        self.olduser_var.set("")
+        self.newpass_var.set("")
+
+    def confirm(self):
+        oldpasw = self.oldpass_var.get().strip()
+        newpasw = self.newpass_var.get().strip()
+        olduser = self.olduser_var.get().strip()
+
+        if olduser == "" or oldpasw == "" or newpasw == "":
+            messagebox.showerror("Empty Fields", "Please fill all the fields.")
+            self.oldpass_var.set("")
+            self.olduser_var.set("")
+            self.newpass_var.set("")
+            return
+
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            sql2 = """
+                    UPDATE project_dashboard
+                    SET Password = %s,
+                        Confirm_Password = %s
+                    WHERE Username = %s AND Password = %s"""
+            # Both the Password and Confirm_Password columns are set to
+            # the new password (the original code referenced an unused
+            # `conwepas` variable here, which was a bug).
+            cursor.execute(sql2, (newpasw, newpasw, olduser, oldpasw))
+            conn.commit()
+            updated = cursor.rowcount > 0
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", f"Could not update password:\n{err}")
+            return
+        finally:
+            cursor.close()
+            conn.close()
+
+        if updated:
+            messagebox.showinfo("Success", "Password updated successfully.")
+            self.oldpass_var.set("")
+            self.olduser_var.set("")
+            self.newpass_var.set("")
+            # clear_panel() alone removes every widget this panel
+            # registered (title, fields, Confirm button) exactly once.
+            self.clear_panel()
+        else:
+            messagebox.showerror("Invalid Details", "Username or Password is incorrect.\nPlease try again.")
+            self.oldpass_var.set("")
+            self.olduser_var.set("")
+            self.newpass_var.set("")
+            self.info_labels["olduser_entry"].focus()
+
+    # ------------------------------------------------------------------
+    # Login
+    # ------------------------------------------------------------------
+    def login(self):
+        self._clear(self.welcome_widgets)
+
+        w = self.login_widgets
+
+        w["note21"] = tk.Label(self.root, text="LOGIN", font=("arial", 15, "bold"), relief="solid",
+                                bg="darkgreen", fg="white", borderwidth=5, padx=5, pady=15)
+        w["note21"].place(x=470, y=0)
+
+        w["username_label"] = tk.Label(self.root, text="Username", font=("arial", 20, "bold"), relief="solid",
+                                        borderwidth=5, bg="darkgreen", fg="white")
+        w["username_label"].place(x=170, y=100)
+        w["username_entry"] = tk.Entry(self.root, textvariable=self.username_var, font=("arial", 20, "bold"),
+                                        relief="solid", borderwidth=5)
+        w["username_entry"].place(x=320, y=100)
+
+        w["password_label"] = tk.Label(self.root, text="Password", font=("arial", 20, "bold"), relief="solid",
+                                        borderwidth=5, bg="darkgreen", fg="white")
+        w["password_label"].place(x=170, y=200)
+        w["password_entry"] = tk.Entry(self.root, textvariable=self.password_var, font=("arial", 20, "bold"),
+                                        relief="solid", borderwidth=5, show="*")
+        w["password_entry"].place(x=320, y=200)
+
+        w["btnsub"] = tk.Button(self.root, text="Submit", font=("arial", 15, "bold"), relief="sunken",
+                                 bg="darkgreen", fg="white", borderwidth=4, padx=2, pady=5,
+                                 command=self.check_login)
+        w["btnsub"].place(x=470, y=400)
+
+        self.username_var.set("")
+        self.password_var.set("")
+
+    def check_login(self):
+        username = self.username_var.get().strip()
+        password = self.password_var.get().strip()
+
+        if username == "" or password == "":
+            messagebox.showerror("Error", "Please enter Username and Password")
+            return
+
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            sql = "SELECT * FROM project_dashboard WHERE Username=%s AND Password=%s"
+            cursor.execute(sql, (username, password))
+            row = cursor.fetchone()
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", f"Could not log in:\n{err}")
+            return
+        finally:
+            cursor.close()
+            conn.close()
+
+        if row:
+            messagebox.showinfo("Success", "Login Successful")
+        else:
+            messagebox.showerror("Error", "Invalid Username or Password")
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = StudentDashboardApp(root)
+    root.mainloop()
